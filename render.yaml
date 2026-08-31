@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: lowes-pdp-scraper
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    envVars:
+      - key: MAX_CONCURRENCY
+        value: "4"
+      - key: MRSCRAPER_USERNAME
+        sync: false
+      - key: MRSCRAPER_PASSWORD
+        sync: false
+    healthCheckPath: /health
