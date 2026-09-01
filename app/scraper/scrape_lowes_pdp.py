@@ -77,7 +77,8 @@ async def _scrape_via_phone_render(raw_url: str) -> ScrapeResult:
         attempts += 1
         try:
             await _jitter_delay()
-            result = await render_via_phone(url)
+            remaining = deadline - time.monotonic()
+            result = await render_via_phone(url, timeout_s=remaining)
         except RenderError as err:
             last_error = str(err)
             logger.warning("Phone render attempt %d failed: %s — retrying", attempts, last_error)

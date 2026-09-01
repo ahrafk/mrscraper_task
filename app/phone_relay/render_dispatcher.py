@@ -12,10 +12,14 @@ class RenderError(Exception):
     pass
 
 
-async def render_via_phone(url: str) -> dict:
+async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
     phone = phone_registry.pick_phone()
     if not phone:
         raise RenderError("no phone connected")
+
+    if timeout_s is None:
+        timeout_s = settings.PHONE_RELAY_RENDER_TIMEOUT_MS / 1000
+    timeout_s = max(timeout_s, 1.0)
 
     job_id = secrets.token_hex(8)
     future: asyncio.Future = asyncio.get_event_loop().create_future()
@@ -25,9 +29,7 @@ async def render_via_phone(url: str) -> dict:
     try:
         await phone.send_json({"type": "render", "job_id": job_id, "url": url})
         try:
-            result = await asyncio.wait_for(
-                future, timeout=settings.PHONE_RELAY_RENDER_TIMEOUT_MS / 1000
-            )
+            result = await asyncio.wait_for(future, timeout=timeout_s)
         except asyncio.TimeoutError:
             raise RenderError("render timed out")
         if result.get("error"):
