@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.logging_config import get_logger
 from app.metrics import RequestRecord, metrics
+from app.phone_relay.render_dispatcher import RenderError, render_via_phone
 from app.queue.scrape_queue import enqueue, queue_status
 from app.scraper.scrape_lowes_pdp import ScrapeError, scrape_lowes_pdp
 from app.scraper.url_validator import InvalidProductUrlError
@@ -69,6 +70,25 @@ async def get_lowes_pdp(
         )
         logger.exception("Unexpected error scraping %s", productUrl)
         return JSONResponse(status_code=500, content={"error": "scrape_failed", "message": str(err)})
+
+
+@router.get("/render")
+async def render_url(url: str = Query(..., min_length=1)):
+    if not url.startswith("https://www.lowes.com/"):
+        return JSONResponse(
+            status_code=400,
+            content={"error": "invalid_request", "message": "url must be under https://www.lowes.com/"},
+        )
+    try:
+        result = await enqueue(lambda: render_via_phone(url))
+        return {
+            "url": url,
+            "status": result.get("status"),
+            "finalUrl": result.get("final_url"),
+            "html": result.get("html", ""),
+        }
+    except RenderError as err:
+        return JSONResponse(status_code=502, content={"error": "render_failed", "message": str(err)})
 
 
 @router.get("/health")

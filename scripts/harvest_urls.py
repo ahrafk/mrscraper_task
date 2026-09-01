@@ -1,22 +1,17 @@
 import asyncio
+import os
 import re
-import sys
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlencode, urlsplit, urlunsplit
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import httpx
 
-from app.browser.browser_pool import browser_pool
-from app.logging_config import configure_logging, get_logger
-from app.scraper.block_detector import detect_block
-
-configure_logging()
-logger = get_logger(__name__)
-
-TARGET_COUNT = 1200
+API_BASE = os.environ.get("API_BASE", "http://localhost:3000")
+TARGET_COUNT = int(os.environ.get("HARVEST_TARGET", "1200"))
 OUTPUT_PATH = Path("test-urls/pdp-urls.txt")
 MAX_PAGES_PER_SEED = 15
 RESULTS_PER_PAGE_GUESS = 24
+HARVEST_CONCURRENCY = int(os.environ.get("HARVEST_CONCURRENCY", "3"))
 
 SEED_SEARCH_TERMS = [
     "refrigerator",
@@ -50,29 +45,14 @@ def next_page_url(seed: str, page_num: int) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query, doseq=True), parts.fragment))
 
 
-async def extract_pdp_links(url: str) -> list[str]:
-    session = await browser_pool.acquire_session()
-    success = False
-    try:
-        page = session.page
-        await page.goto(url, wait_until="commit", timeout=20000)
-        await page.wait_for_timeout(3000)
-
-        html = await page.content()
-        found = sorted({f"https://www.lowes.com{path}" for path in PDP_LINK_RE.findall(html)})
-        logger.info(
-            "Harvested %d PDP links from %s (proxy=%s)",
-            len(found),
-            url,
-            session.proxy.key if session.proxy else None,
-        )
-        success = not detect_block(None, html).blocked
-        return found
-    finally:
-        await browser_pool.release_session(session, success)
-
-
-HARVEST_CONCURRENCY = 6
+async def extract_pdp_links(client: httpx.AsyncClient, url: str) -> list[str]:
+    resp = await client.get(f"{API_BASE}/render", params={"url": url}, timeout=70)
+    if resp.status_code != 200:
+        raise RuntimeError(f"{resp.status_code}: {resp.text[:200]}")
+    html = resp.json().get("html", "")
+    found = sorted({f"https://www.lowes.com{path}" for path in PDP_LINK_RE.findall(html)})
+    print(f"got {len(found)} links from {url}")
+    return found
 
 
 async def main() -> None:
@@ -86,35 +66,33 @@ async def main() -> None:
         for page_num in range(MAX_PAGES_PER_SEED):
             queue.put_nowait(seed if page_num == 0 else next_page_url(seed, page_num))
 
-    async def worker() -> None:
+    async def worker(client: httpx.AsyncClient) -> None:
         while not stop.is_set():
             try:
                 page_url = queue.get_nowait()
             except asyncio.QueueEmpty:
                 return
             try:
-                links = await extract_pdp_links(page_url)
+                links = await extract_pdp_links(client, page_url)
                 async with lock:
                     collected.update(links)
                     if len(collected) >= TARGET_COUNT:
                         stop.set()
             except Exception as err:
-                logger.warning("Failed to harvest %s — skipping: %s", page_url, err)
+                print(f"failed on {page_url}: {err}")
             finally:
                 queue.task_done()
 
-    await asyncio.gather(*(worker() for _ in range(HARVEST_CONCURRENCY)))
+    async with httpx.AsyncClient() as client:
+        await asyncio.gather(*(worker(client) for _ in range(HARVEST_CONCURRENCY)))
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text("\n".join(sorted(collected)) + "\n", encoding="utf-8")
-    logger.info("Harvest complete: %d URLs written to %s", len(collected), OUTPUT_PATH)
-    if len(collected) < 1000:
-        logger.warning(
-            "Fewer than 1000 URLs harvested (%d) — add more seed terms/pages, or paste extra "
-            "PDP URLs into the output file by hand.",
-            len(collected),
-        )
-    await browser_pool.shutdown()
+    existing = set()
+    if OUTPUT_PATH.exists():
+        existing = {line.strip() for line in OUTPUT_PATH.read_text(encoding="utf-8").splitlines() if line.strip()}
+    combined = sorted(existing | collected)
+    OUTPUT_PATH.write_text("\n".join(combined) + "\n", encoding="utf-8")
+    print(f"harvest complete: {len(collected)} new, {len(combined)} total written to {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
