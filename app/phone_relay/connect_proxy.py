@@ -63,7 +63,7 @@ class LocalConnectProxy:
     async def _proxy_tunnel(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, host: str, port: int
     ) -> None:
-        phone = phone_registry.pick_phone()
+        phone = await phone_registry.pick_phone()
         if not phone:
             writer.write(b"HTTP/1.1 502 Bad Gateway\r\n\r\nNo phone relay available\r\n")
             await writer.drain()

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import random
 import re
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlencode, urlsplit, urlunsplit
@@ -12,6 +13,8 @@ OUTPUT_PATH = Path("test-urls/pdp-urls.txt")
 MAX_PAGES_PER_SEED = 15
 RESULTS_PER_PAGE_GUESS = 24
 HARVEST_CONCURRENCY = int(os.environ.get("HARVEST_CONCURRENCY", "3"))
+MIN_DELAY_S = float(os.environ.get("HARVEST_MIN_DELAY_S", "2"))
+MAX_DELAY_S = float(os.environ.get("HARVEST_MAX_DELAY_S", "6"))
 
 SEED_SEARCH_TERMS = [
     "refrigerator",
@@ -72,6 +75,7 @@ async def main() -> None:
                 page_url = queue.get_nowait()
             except asyncio.QueueEmpty:
                 return
+            await asyncio.sleep(random.uniform(MIN_DELAY_S, MAX_DELAY_S))
             try:
                 links = await extract_pdp_links(client, page_url)
                 async with lock:

@@ -21,6 +21,7 @@ class PhoneConnection:
     pending_renders: dict = field(default_factory=dict)
     streams: dict = field(default_factory=dict)
     active_stream_count: int = 0
+    last_used_at: float = 0.0
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def send_json(self, payload: dict) -> None:
@@ -60,18 +61,30 @@ class PhoneRegistry:
     def count(self) -> int:
         return len(self._phones)
 
-    def pick_phone(self) -> Optional[PhoneConnection]:
-        if not self._phones:
-            return None
-        phones = list(self._phones.values())
-        n = len(phones)
-        for i in range(n):
-            candidate = phones[(self._rr_index + i) % n]
-            if candidate.active_stream_count < settings.PHONE_RELAY_MAX_STREAMS_PER_PHONE:
-                self._rr_index = (self._rr_index + i + 1) % n
-                return candidate
-        self._rr_index = (self._rr_index + 1) % n
-        return phones[self._rr_index]
+    async def pick_phone(self, max_wait_s: float = 120.0) -> Optional[PhoneConnection]:
+        started = time.monotonic()
+        cooldown_s = settings.PHONE_RELAY_COOLDOWN_MS / 1000
+        while True:
+            if not self._phones:
+                return None
+            now = time.monotonic()
+            phones = list(self._phones.values())
+            n = len(phones)
+            for i in range(n):
+                candidate = phones[(self._rr_index + i) % n]
+                if (
+                    candidate.active_stream_count < settings.PHONE_RELAY_MAX_STREAMS_PER_PHONE
+                    and now - candidate.last_used_at >= cooldown_s
+                ):
+                    self._rr_index = (self._rr_index + i + 1) % n
+                    candidate.last_used_at = now
+                    return candidate
+            if now - started >= max_wait_s:
+                fallback = phones[self._rr_index % n]
+                self._rr_index = (self._rr_index + 1) % n
+                fallback.last_used_at = now
+                return fallback
+            await asyncio.sleep(0.5)
 
 
 phone_registry = PhoneRegistry()

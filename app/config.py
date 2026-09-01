@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     PHONE_RELAY_MAX_STREAMS_PER_PHONE: int = 4
     PHONE_RELAY_OPEN_TIMEOUT_MS: int = 15000
     PHONE_RELAY_RENDER_TIMEOUT_MS: int = 45000
+    PHONE_RELAY_COOLDOWN_MS: int = 5000
 
     HEADLESS: bool | Literal["virtual"] = True
 

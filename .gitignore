@@ -9,3 +9,4 @@ test-urls/*.json
 load-test-report*.json
 .pytest_cache/
 .DS_Store
+readme-reference-notes.txt

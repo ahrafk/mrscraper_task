@@ -13,7 +13,7 @@ class RenderError(Exception):
 
 
 async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
-    phone = phone_registry.pick_phone()
+    phone = await phone_registry.pick_phone()
     if not phone:
         raise RenderError("no phone connected")
 
