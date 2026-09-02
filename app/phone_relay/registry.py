@@ -22,6 +22,7 @@ class PhoneConnection:
     streams: dict = field(default_factory=dict)
     active_stream_count: int = 0
     last_used_at: float = 0.0
+    penalty_until: float = 0.0
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def send_json(self, payload: dict) -> None:
@@ -61,6 +62,12 @@ class PhoneRegistry:
     def count(self) -> int:
         return len(self._phones)
 
+    def penalize(self, phone_id: str, penalty_s: float) -> None:
+        phone = self._phones.get(phone_id)
+        if phone:
+            phone.penalty_until = max(phone.penalty_until, time.monotonic() + penalty_s)
+            logger.warning("Phone %s put on block penalty for %.0fs", phone_id, penalty_s)
+
     async def pick_phone(self, max_wait_s: float = 120.0) -> Optional[PhoneConnection]:
         started = time.monotonic()
         cooldown_s = settings.PHONE_RELAY_COOLDOWN_MS / 1000
@@ -75,12 +82,15 @@ class PhoneRegistry:
                 if (
                     candidate.active_stream_count < settings.PHONE_RELAY_MAX_STREAMS_PER_PHONE
                     and now - candidate.last_used_at >= cooldown_s
+                    and now >= candidate.penalty_until
                 ):
                     self._rr_index = (self._rr_index + i + 1) % n
                     candidate.last_used_at = now
                     return candidate
             if now - started >= max_wait_s:
-                fallback = phones[self._rr_index % n]
+                unpenalized = [p for p in phones if now >= p.penalty_until]
+                pool = unpenalized or phones
+                fallback = pool[self._rr_index % len(pool)]
                 self._rr_index = (self._rr_index + 1) % n
                 fallback.last_used_at = now
                 return fallback

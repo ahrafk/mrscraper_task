@@ -5,6 +5,7 @@ import time
 from app.config import settings
 from app.logging_config import get_logger
 from app.phone_relay.registry import phone_registry
+from app.scraper.block_detector import detect_block
 
 logger = get_logger(__name__)
 
@@ -45,6 +46,9 @@ async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
             raise RenderError("render timed out")
         if result.get("error"):
             raise RenderError(result["error"])
+        block = detect_block(result.get("status"), result.get("html", ""))
+        if block.blocked:
+            phone_registry.penalize(phone.phone_id, settings.PHONE_RELAY_BLOCK_PENALTY_MS / 1000)
         return result
     finally:
         phone.pending_renders.pop(job_id, None)

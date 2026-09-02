@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     PHONE_RELAY_OPEN_TIMEOUT_MS: int = 15000
     PHONE_RELAY_RENDER_TIMEOUT_MS: int = 45000
     PHONE_RELAY_COOLDOWN_MS: int = 5000
+    PHONE_RELAY_BLOCK_PENALTY_MS: int = 180000
 
     HEADLESS: bool | Literal["virtual"] = True
 
