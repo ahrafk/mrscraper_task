@@ -14,7 +14,7 @@ class RenderError(Exception):
     pass
 
 
-MIN_RENDER_RESERVE_S = 10.0
+MIN_RENDER_RESERVE_S = 25.0
 
 
 async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
