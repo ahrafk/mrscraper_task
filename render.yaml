@@ -18,5 +18,5 @@ services:
       - key: HEADLESS
         value: virtual
       - key: MAX_CONCURRENCY
-        value: "20"
+        value: "3"
     healthCheckPath: /health

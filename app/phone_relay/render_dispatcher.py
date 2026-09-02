@@ -43,11 +43,14 @@ async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
         try:
             result = await asyncio.wait_for(future, timeout=timeout_s)
         except asyncio.TimeoutError:
+            logger.warning("Render timed out on phone=%s after %.1fs", phone.phone_id, timeout_s)
             raise RenderError("render timed out")
         if result.get("error"):
+            logger.warning("Render error on phone=%s: %s", phone.phone_id, result["error"])
             raise RenderError(result["error"])
         block = detect_block(result.get("status"), result.get("html", ""))
         if block.blocked:
+            logger.warning("Render blocked on phone=%s reason=%s", phone.phone_id, block.reason)
             phone_registry.penalize(phone.phone_id, settings.PHONE_RELAY_BLOCK_PENALTY_MS / 1000)
         return result
     finally:
