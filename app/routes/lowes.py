@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.logging_config import get_logger
 from app.metrics import RequestRecord, metrics
+from app.phone_relay.registry import phone_registry
 from app.phone_relay.render_dispatcher import RenderError, render_via_phone
 from app.queue.scrape_queue import enqueue, queue_status
 from app.scraper.scrape_lowes_pdp import ScrapeError, scrape_lowes_pdp
@@ -93,7 +94,12 @@ async def render_url(url: str = Query(..., min_length=1)):
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "queue": queue_status()}
+    return {
+        "status": "ok",
+        "queue": queue_status(),
+        "phonesConnected": phone_registry.count,
+        "phoneIds": list(phone_registry._phones.keys()),
+    }
 
 
 @router.get("/metrics")
