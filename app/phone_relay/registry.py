@@ -109,8 +109,11 @@ class PhoneRegistry:
                     candidate.last_used_at = now
                     return candidate
             if now - started >= max_wait_s:
-                unpenalized = [p for p in phones if now >= p.penalty_until]
-                pool = unpenalized or phones
+                available = [
+                    p for p in phones if p.active_stream_count < settings.PHONE_RELAY_MAX_STREAMS_PER_PHONE
+                ]
+                unpenalized = [p for p in available if now >= p.penalty_until]
+                pool = unpenalized or available or phones
                 fallback = pool[self._rr_index % len(pool)]
                 self._rr_index = (self._rr_index + 1) % n
                 fallback.last_used_at = now
