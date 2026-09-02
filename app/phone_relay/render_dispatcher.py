@@ -44,7 +44,9 @@ async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
             result = await asyncio.wait_for(future, timeout=timeout_s)
         except asyncio.TimeoutError:
             logger.warning("Render timed out on phone=%s after %.1fs", phone.phone_id, timeout_s)
+            phone_registry.record_timeout(phone.phone_id)
             raise RenderError("render timed out")
+        phone_registry.record_success(phone.phone_id)
         if result.get("error"):
             logger.warning("Render error on phone=%s: %s", phone.phone_id, result["error"])
             raise RenderError(result["error"])

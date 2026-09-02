@@ -58,6 +58,7 @@ async def get_lowes_pdp(
                 attempts=err.attempts,
                 blocked_retries=err.attempts,
                 timestamp=time.time(),
+                error_reason=err.reason,
             )
         )
         logger.error("Scrape failed for %s: %s", productUrl, err)
@@ -67,7 +68,14 @@ async def get_lowes_pdp(
     except Exception as err:
         latency_ms = (time.monotonic() - start) * 1000
         metrics.record(
-            RequestRecord(ok=False, latency_ms=latency_ms, attempts=0, blocked_retries=0, timestamp=time.time())
+            RequestRecord(
+                ok=False,
+                latency_ms=latency_ms,
+                attempts=0,
+                blocked_retries=0,
+                timestamp=time.time(),
+                error_reason=type(err).__name__,
+            )
         )
         logger.exception("Unexpected error scraping %s", productUrl)
         return JSONResponse(status_code=500, content={"error": "scrape_failed", "message": str(err)})

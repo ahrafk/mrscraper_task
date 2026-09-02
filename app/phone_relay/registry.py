@@ -23,6 +23,7 @@ class PhoneConnection:
     active_stream_count: int = 0
     last_used_at: float = 0.0
     penalty_until: float = 0.0
+    consecutive_timeouts: int = 0
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def send_json(self, payload: dict) -> None:
@@ -67,6 +68,26 @@ class PhoneRegistry:
         if phone:
             phone.penalty_until = max(phone.penalty_until, time.monotonic() + penalty_s)
             logger.warning("Phone %s put on block penalty for %.0fs", phone_id, penalty_s)
+
+    def record_success(self, phone_id: str) -> None:
+        phone = self._phones.get(phone_id)
+        if phone:
+            phone.consecutive_timeouts = 0
+
+    def record_timeout(self, phone_id: str) -> None:
+        phone = self._phones.get(phone_id)
+        if not phone:
+            return
+        phone.consecutive_timeouts += 1
+        if phone.consecutive_timeouts >= settings.PHONE_RELAY_TIMEOUT_STRIKE_LIMIT:
+            penalty_s = settings.PHONE_RELAY_TIMEOUT_PENALTY_MS / 1000
+            phone.penalty_until = max(phone.penalty_until, time.monotonic() + penalty_s)
+            logger.warning(
+                "Phone %s unresponsive %d times in a row — pulled from rotation for %.0fs",
+                phone_id,
+                phone.consecutive_timeouts,
+                penalty_s,
+            )
 
     async def pick_phone(self, max_wait_s: float = 120.0) -> Optional[PhoneConnection]:
         started = time.monotonic()

@@ -27,10 +27,11 @@ def _product_id(url: str) -> str:
 
 
 class ScrapeError(Exception):
-    def __init__(self, message: str, status_code: int, attempts: int) -> None:
+    def __init__(self, message: str, status_code: int, attempts: int, reason: str = "unknown") -> None:
         super().__init__(message)
         self.status_code = status_code
         self.attempts = attempts
+        self.reason = reason
 
 
 @dataclass
@@ -106,7 +107,7 @@ async def _scrape_via_phone_render(raw_url: str) -> ScrapeResult:
             html=html, price=price or "", attempts=attempts, latency_ms=(time.monotonic() - start) * 1000
         )
 
-    raise ScrapeError(f"Failed after {attempts} attempt(s): {last_error}", 502, attempts)
+    raise ScrapeError(f"Failed after {attempts} attempt(s): {last_error}", 502, attempts, reason=last_error)
 
 
 async def _scrape_via_browser_pool(raw_url: str) -> ScrapeResult:
@@ -197,4 +198,4 @@ async def _scrape_via_browser_pool(raw_url: str) -> ScrapeResult:
             if session:
                 await browser_pool.release_session(session, success)
 
-    raise ScrapeError(f"Failed after {attempts} attempt(s): {last_error}", 502, attempts)
+    raise ScrapeError(f"Failed after {attempts} attempt(s): {last_error}", 502, attempts, reason=last_error)

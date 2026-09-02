@@ -1,5 +1,7 @@
 import time
+from collections import Counter
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -9,6 +11,7 @@ class RequestRecord:
     attempts: int
     blocked_retries: int
     timestamp: float
+    error_reason: Optional[str] = None
 
 
 class Metrics:
@@ -39,6 +42,7 @@ class Metrics:
             return values[idx]
 
         avg_latency = avg(latencies)
+        error_reasons = Counter(r.error_reason for r in errors if r.error_reason)
         return {
             "windowStartedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self._started_at)),
             "windowDurationSec": round(time.time() - self._started_at),
@@ -53,6 +57,7 @@ class Metrics:
             "avgAttempts": round(avg([r.attempts for r in self._records]), 2),
             "meetsLatencySla": avg_latency <= 60000,
             "meetsErrorRateSla": (len(errors) / total <= 0.05) if total else True,
+            "errorReasons": dict(error_reasons.most_common()),
         }
 
 
