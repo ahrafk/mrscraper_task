@@ -13,13 +13,17 @@ class RenderError(Exception):
     pass
 
 
+MIN_RENDER_RESERVE_S = 10.0
+
+
 async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
     if timeout_s is None:
         timeout_s = settings.PHONE_RELAY_RENDER_TIMEOUT_MS / 1000
     timeout_s = max(timeout_s, 1.0)
 
     wait_start = time.monotonic()
-    phone = await phone_registry.pick_phone(max_wait_s=timeout_s)
+    pick_budget = max(timeout_s - MIN_RENDER_RESERVE_S, 0.5)
+    phone = await phone_registry.pick_phone(max_wait_s=pick_budget)
     if not phone:
         raise RenderError("no phone connected")
 
