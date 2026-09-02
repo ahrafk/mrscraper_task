@@ -1,5 +1,6 @@
 import asyncio
 import secrets
+import time
 
 from app.config import settings
 from app.logging_config import get_logger
@@ -13,13 +14,19 @@ class RenderError(Exception):
 
 
 async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
-    phone = await phone_registry.pick_phone()
-    if not phone:
-        raise RenderError("no phone connected")
-
     if timeout_s is None:
         timeout_s = settings.PHONE_RELAY_RENDER_TIMEOUT_MS / 1000
     timeout_s = max(timeout_s, 1.0)
+
+    wait_start = time.monotonic()
+    phone = await phone_registry.pick_phone(max_wait_s=timeout_s)
+    if not phone:
+        raise RenderError("no phone connected")
+
+    remaining = timeout_s - (time.monotonic() - wait_start)
+    if remaining <= 1.0:
+        raise RenderError("no phone became available in time")
+    timeout_s = remaining
 
     job_id = secrets.token_hex(8)
     future: asyncio.Future = asyncio.get_event_loop().create_future()
