@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     MIN_DELAY_MS: int = 800
     MAX_DELAY_MS: int = 3500
 
-    REQUEST_BUDGET_MS: int = 120000
+    REQUEST_BUDGET_MS: int = 60000
     MAX_ATTEMPTS_PER_REQUEST: int = 4
 
     PROXY_LIST: str = ""

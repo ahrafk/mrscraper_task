@@ -1,4 +1,5 @@
 import asyncio
+import math
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -78,7 +79,9 @@ class PhoneRegistry:
         window_s = settings.PHONE_RELAY_FLEET_BLOCK_WINDOW_MS / 1000
         self._fleet_block_events = [t for t in self._fleet_block_events if now - t <= window_s]
         self._fleet_block_events.append(now)
-        if len(self._fleet_block_events) >= settings.PHONE_RELAY_FLEET_BLOCK_THRESHOLD:
+        floor = settings.PHONE_RELAY_FLEET_BLOCK_THRESHOLD
+        threshold = max(floor, math.ceil(len(self._phones) / 2))
+        if len(self._fleet_block_events) >= threshold:
             self._trigger_fleet_cooldown(now)
 
     def _trigger_fleet_cooldown(self, now: float) -> None:
