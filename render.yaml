@@ -5,18 +5,10 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     envVars:
-      - key: PROXY_BACKEND
-        value: phone_relay_render
       - key: PHONE_RELAY_ENABLED
         value: "true"
-      - key: PHONE_RELAY_LOCAL_PORT
-        value: "8899"
       - key: PHONE_RELAY_MAX_STREAMS_PER_PHONE
         value: "1"
       - key: PHONE_RELAY_TOKEN
         sync: false
-      - key: HEADLESS
-        value: virtual
-      - key: MAX_CONCURRENCY
-        value: "1"
     healthCheckPath: /health

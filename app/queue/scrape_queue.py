@@ -9,15 +9,11 @@ _lock = asyncio.Lock()
 _pending = 0
 _active = 0
 
-_PHONE_BACKENDS = ("phone_relay_render", "phone_relay")
-
 
 def _capacity() -> int:
-    if settings.PROXY_BACKEND in _PHONE_BACKENDS:
-        from app.phone_relay.registry import phone_registry
+    from app.phone_relay.registry import phone_registry
 
-        return max(phone_registry.count * settings.PHONE_RELAY_MAX_STREAMS_PER_PHONE, 1)
-    return settings.MAX_CONCURRENCY
+    return max(phone_registry.count * settings.PHONE_RELAY_MAX_STREAMS_PER_PHONE, 1)
 
 
 async def enqueue(fn: Callable[[], Awaitable[T]]) -> T:
