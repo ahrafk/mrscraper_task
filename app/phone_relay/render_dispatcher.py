@@ -15,7 +15,7 @@ class RenderError(Exception):
     pass
 
 
-MIN_RENDER_RESERVE_S = 25.0
+MIN_RENDER_RESERVE_S = 40.0
 
 _SLUG_RE = re.compile(r"/pd/([^/]+)/(\d+)")
 
