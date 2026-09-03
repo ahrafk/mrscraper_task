@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     CORS_ORIGIN: str = "*"
 
-    MAX_CONCURRENCY: int = 4
+    MAX_CONCURRENCY: int = 1
     MIN_DELAY_MS: int = 800
     MAX_DELAY_MS: int = 3500
 
