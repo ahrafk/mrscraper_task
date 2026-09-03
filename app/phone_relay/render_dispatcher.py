@@ -1,4 +1,5 @@
 import asyncio
+import re
 import secrets
 import time
 
@@ -16,6 +17,16 @@ class RenderError(Exception):
 
 MIN_RENDER_RESERVE_S = 25.0
 
+_SLUG_RE = re.compile(r"/pd/([^/]+)/(\d+)")
+
+
+def derive_search_query(url: str) -> str:
+    match = _SLUG_RE.search(url)
+    if not match:
+        return ""
+    slug, product_id = match.group(1), match.group(2)
+    return f"{slug.replace('-', ' ')} {product_id}"
+
 
 async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
     if timeout_s is None:
@@ -26,6 +37,9 @@ async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
     pick_budget = max(timeout_s - MIN_RENDER_RESERVE_S, 0.5)
     phone = await phone_registry.pick_phone(max_wait_s=pick_budget)
     if not phone:
+        fleet_remaining = phone_registry.fleet_penalty_remaining_s()
+        if fleet_remaining > 0:
+            raise RenderError(f"fleet-wide cooldown active for {fleet_remaining:.0f}s more")
         raise RenderError("no phone connected")
 
     remaining = timeout_s - (time.monotonic() - wait_start)
@@ -39,7 +53,9 @@ async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
     phone.active_stream_count += 1
 
     try:
-        await phone.send_json({"type": "render", "job_id": job_id, "url": url})
+        await phone.send_json(
+            {"type": "render", "job_id": job_id, "url": url, "search_query": derive_search_query(url)}
+        )
         try:
             result = await asyncio.wait_for(future, timeout=timeout_s)
         except asyncio.TimeoutError:

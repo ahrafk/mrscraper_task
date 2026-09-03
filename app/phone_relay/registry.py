@@ -41,6 +41,7 @@ class PhoneRegistry:
         self._rr_index = 0
         self._fleet_block_events: list[float] = []
         self._last_fleet_trigger_at: float = 0.0
+        self._fleet_penalty_until: float = 0.0
 
     def register(self, phone_id: str, websocket: WebSocket) -> PhoneConnection:
         phone = PhoneConnection(phone_id=phone_id, websocket=websocket)
@@ -100,9 +101,10 @@ class PhoneRegistry:
             )
         self._last_fleet_trigger_at = now
         self._fleet_block_events = []
-        until = now + cooldown_s
-        for phone in self._phones.values():
-            phone.penalty_until = max(phone.penalty_until, until)
+        self._fleet_penalty_until = max(self._fleet_penalty_until, now + cooldown_s)
+
+    def fleet_penalty_remaining_s(self) -> float:
+        return max(0.0, self._fleet_penalty_until - time.monotonic())
 
     def record_success(self, phone_id: str) -> None:
         phone = self._phones.get(phone_id)
@@ -129,6 +131,8 @@ class PhoneRegistry:
         cooldown_s = settings.PHONE_RELAY_COOLDOWN_MS / 1000
         while True:
             if not self._phones:
+                return None
+            if time.monotonic() < self._fleet_penalty_until:
                 return None
             now = time.monotonic()
             phones = list(self._phones.values())
