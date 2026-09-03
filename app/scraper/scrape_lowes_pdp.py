@@ -73,13 +73,14 @@ async def _scrape_via_phone_render(raw_url: str) -> ScrapeResult:
 
     last_error = "unknown"
     attempts = 0
+    use_search = True
 
     while attempts < settings.MAX_ATTEMPTS_PER_REQUEST and time.monotonic() < deadline:
         attempts += 1
         try:
             await _jitter_delay()
             remaining = deadline - time.monotonic()
-            result = await render_via_phone(url, timeout_s=remaining)
+            result = await render_via_phone(url, timeout_s=remaining, use_search=use_search)
         except RenderError as err:
             last_error = str(err)
             logger.warning("Phone render attempt %d failed: %s — retrying", attempts, last_error)
@@ -101,6 +102,8 @@ async def _scrape_via_phone_render(raw_url: str) -> ScrapeResult:
                 attempts,
                 error,
             )
+            if error == "wrong-page-landed":
+                use_search = False
             continue
 
         return ScrapeResult(

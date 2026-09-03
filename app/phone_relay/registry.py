@@ -1,5 +1,4 @@
 import asyncio
-import math
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -40,9 +39,6 @@ class PhoneRegistry:
     def __init__(self) -> None:
         self._phones: dict[str, PhoneConnection] = {}
         self._rr_index = 0
-        self._fleet_blocked_phones: dict[str, float] = {}
-        self._last_fleet_trigger_at: float = 0.0
-        self._fleet_penalty_until: float = 0.0
 
     def register(self, phone_id: str, websocket: WebSocket) -> PhoneConnection:
         phone = PhoneConnection(phone_id=phone_id, websocket=websocket)
@@ -72,44 +68,6 @@ class PhoneRegistry:
         if phone:
             phone.penalty_until = max(phone.penalty_until, time.monotonic() + penalty_s)
             logger.warning("Phone %s put on block penalty for %.0fs", phone_id, penalty_s)
-        self._record_fleet_block(phone_id)
-
-    def _record_fleet_block(self, phone_id: str) -> None:
-        now = time.monotonic()
-        window_s = settings.PHONE_RELAY_FLEET_BLOCK_WINDOW_MS / 1000
-        self._fleet_blocked_phones = {
-            pid: t for pid, t in self._fleet_blocked_phones.items() if now - t <= window_s
-        }
-        self._fleet_blocked_phones[phone_id] = now
-        floor = settings.PHONE_RELAY_FLEET_BLOCK_THRESHOLD
-        threshold = max(floor, math.ceil(len(self._phones) / 2))
-        if len(self._fleet_blocked_phones) >= threshold:
-            self._trigger_fleet_cooldown(now)
-
-    def _trigger_fleet_cooldown(self, now: float) -> None:
-        escalation_window_s = settings.PHONE_RELAY_FLEET_ESCALATION_WINDOW_MS / 1000
-        if self._last_fleet_trigger_at and now - self._last_fleet_trigger_at <= escalation_window_s:
-            cooldown_s = settings.PHONE_RELAY_FLEET_ESCALATED_COOLDOWN_MS / 1000
-            logger.warning(
-                "Fleet-wide block pattern recurred within %.0fs of the last one — escalating "
-                "whole-fleet cooldown to %.0fs",
-                escalation_window_s,
-                cooldown_s,
-            )
-        else:
-            cooldown_s = settings.PHONE_RELAY_FLEET_COOLDOWN_MS / 1000
-            logger.warning(
-                "Correlated blocking detected across the fleet (%d distinct phones in window) — "
-                "pausing all connected phones for %.0fs",
-                len(self._fleet_blocked_phones),
-                cooldown_s,
-            )
-        self._last_fleet_trigger_at = now
-        self._fleet_blocked_phones = {}
-        self._fleet_penalty_until = max(self._fleet_penalty_until, now + cooldown_s)
-
-    def fleet_penalty_remaining_s(self) -> float:
-        return max(0.0, self._fleet_penalty_until - time.monotonic())
 
     def record_success(self, phone_id: str) -> None:
         phone = self._phones.get(phone_id)
@@ -136,8 +94,6 @@ class PhoneRegistry:
         cooldown_s = settings.PHONE_RELAY_COOLDOWN_MS / 1000
         while True:
             if not self._phones:
-                return None
-            if time.monotonic() < self._fleet_penalty_until:
                 return None
             now = time.monotonic()
             phones = list(self._phones.values())

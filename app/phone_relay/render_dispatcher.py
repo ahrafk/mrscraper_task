@@ -28,22 +28,15 @@ def derive_search_query(url: str) -> str:
     return f"{slug.replace('-', ' ')} {product_id}"
 
 
-async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
+async def render_via_phone(url: str, timeout_s: float | None = None, use_search: bool = True) -> dict:
     if timeout_s is None:
         timeout_s = settings.PHONE_RELAY_RENDER_TIMEOUT_MS / 1000
     timeout_s = max(timeout_s, 1.0)
-
-    fleet_remaining = phone_registry.fleet_penalty_remaining_s()
-    if fleet_remaining > 0:
-        raise RenderError(f"fleet-wide cooldown active for {fleet_remaining:.0f}s more")
 
     wait_start = time.monotonic()
     pick_budget = max(timeout_s - MIN_RENDER_RESERVE_S, 0.5)
     phone = await phone_registry.pick_phone(max_wait_s=pick_budget)
     if not phone:
-        fleet_remaining = phone_registry.fleet_penalty_remaining_s()
-        if fleet_remaining > 0:
-            raise RenderError(f"fleet-wide cooldown active for {fleet_remaining:.0f}s more")
         raise RenderError("no phone connected")
 
     remaining = timeout_s - (time.monotonic() - wait_start)
@@ -57,8 +50,9 @@ async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
     phone.active_stream_count += 1
 
     try:
+        search_query = derive_search_query(url) if use_search else ""
         await phone.send_json(
-            {"type": "render", "job_id": job_id, "url": url, "search_query": derive_search_query(url)}
+            {"type": "render", "job_id": job_id, "url": url, "search_query": search_query}
         )
         try:
             result = await asyncio.wait_for(future, timeout=timeout_s)
