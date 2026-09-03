@@ -39,6 +39,8 @@ class PhoneRegistry:
     def __init__(self) -> None:
         self._phones: dict[str, PhoneConnection] = {}
         self._rr_index = 0
+        self._fleet_block_events: list[float] = []
+        self._last_fleet_trigger_at: float = 0.0
 
     def register(self, phone_id: str, websocket: WebSocket) -> PhoneConnection:
         phone = PhoneConnection(phone_id=phone_id, websocket=websocket)
@@ -68,6 +70,39 @@ class PhoneRegistry:
         if phone:
             phone.penalty_until = max(phone.penalty_until, time.monotonic() + penalty_s)
             logger.warning("Phone %s put on block penalty for %.0fs", phone_id, penalty_s)
+        self._record_fleet_block()
+
+    def _record_fleet_block(self) -> None:
+        now = time.monotonic()
+        window_s = settings.PHONE_RELAY_FLEET_BLOCK_WINDOW_MS / 1000
+        self._fleet_block_events = [t for t in self._fleet_block_events if now - t <= window_s]
+        self._fleet_block_events.append(now)
+        if len(self._fleet_block_events) >= settings.PHONE_RELAY_FLEET_BLOCK_THRESHOLD:
+            self._trigger_fleet_cooldown(now)
+
+    def _trigger_fleet_cooldown(self, now: float) -> None:
+        escalation_window_s = settings.PHONE_RELAY_FLEET_ESCALATION_WINDOW_MS / 1000
+        if self._last_fleet_trigger_at and now - self._last_fleet_trigger_at <= escalation_window_s:
+            cooldown_s = settings.PHONE_RELAY_FLEET_ESCALATED_COOLDOWN_MS / 1000
+            logger.warning(
+                "Fleet-wide block pattern recurred within %.0fs of the last one — escalating "
+                "whole-fleet cooldown to %.0fs",
+                escalation_window_s,
+                cooldown_s,
+            )
+        else:
+            cooldown_s = settings.PHONE_RELAY_FLEET_COOLDOWN_MS / 1000
+            logger.warning(
+                "Correlated blocking detected across the fleet (%d blocks in window) — "
+                "pausing all connected phones for %.0fs",
+                len(self._fleet_block_events),
+                cooldown_s,
+            )
+        self._last_fleet_trigger_at = now
+        self._fleet_block_events = []
+        until = now + cooldown_s
+        for phone in self._phones.values():
+            phone.penalty_until = max(phone.penalty_until, until)
 
     def record_success(self, phone_id: str) -> None:
         phone = self._phones.get(phone_id)
