@@ -33,6 +33,14 @@ async def render_via_phone(url: str, timeout_s: float | None = None) -> dict:
         timeout_s = settings.PHONE_RELAY_RENDER_TIMEOUT_MS / 1000
     timeout_s = max(timeout_s, 1.0)
 
+    fleet_remaining = phone_registry.fleet_penalty_remaining_s()
+    if fleet_remaining > 0:
+        waitable = timeout_s - MIN_RENDER_RESERVE_S
+        if fleet_remaining > waitable:
+            raise RenderError(f"fleet-wide cooldown active for {fleet_remaining:.0f}s more")
+        logger.warning("Waiting out a %.0fs fleet-wide cooldown before attempting render", fleet_remaining)
+        await asyncio.sleep(fleet_remaining + 1.0)
+
     wait_start = time.monotonic()
     pick_budget = max(timeout_s - MIN_RENDER_RESERVE_S, 0.5)
     phone = await phone_registry.pick_phone(max_wait_s=pick_budget)
