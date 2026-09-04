@@ -63,6 +63,7 @@ async def scrape_lowes_pdp(raw_url: str) -> ScrapeResult:
     last_error = "unknown"
     attempts = 0
     use_search = True
+    last_priceless_html: str | None = None
 
     while attempts < settings.MAX_ATTEMPTS_PER_REQUEST and time.monotonic() < deadline:
         attempts += 1
@@ -93,10 +94,20 @@ async def scrape_lowes_pdp(raw_url: str) -> ScrapeResult:
             )
             if error == "wrong-page-landed":
                 use_search = False
+            elif error == "price-not-found":
+                # the page itself landed correctly and isn't blocked, it just has no price to
+                # show right now (commonly a genuinely out of stock or discontinued item), so
+                # this is a real, successfully scraped page, not a failed scrape
+                last_priceless_html = html
             continue
 
         return ScrapeResult(
             html=html, price=price or "", attempts=attempts, latency_ms=(time.monotonic() - start) * 1000
+        )
+
+    if last_priceless_html is not None:
+        return ScrapeResult(
+            html=last_priceless_html, price="", attempts=attempts, latency_ms=(time.monotonic() - start) * 1000
         )
 
     raise ScrapeError(f"Failed after {attempts} attempt(s): {last_error}", 502, attempts, reason=last_error)
