@@ -46,15 +46,21 @@ class PhoneRegistry:
         logger.info("Phone connected: %s (total=%d)", phone_id, len(self._phones))
         return phone
 
-    def unregister(self, phone_id: str) -> None:
-        phone = self._phones.pop(phone_id, None)
-        if phone:
-            for q in phone.streams.values():
+    def unregister(self, phone_id: str, phone: Optional["PhoneConnection"] = None) -> None:
+        current = self._phones.get(phone_id)
+        if phone is not None and current is not phone:
+            # a newer connection under this same name has already taken over, this call
+            # is the older connection finally noticing its own closure, it must not rip
+            # out the connection that's actually live right now
+            return
+        existing = self._phones.pop(phone_id, None)
+        if existing:
+            for q in existing.streams.values():
                 q.put_nowait(None)
-            for fut in phone.pending_opens.values():
+            for fut in existing.pending_opens.values():
                 if not fut.done():
                     fut.set_result(False)
-            for fut in phone.pending_renders.values():
+            for fut in existing.pending_renders.values():
                 if not fut.done():
                     fut.set_exception(ConnectionError("phone disconnected mid-render"))
             logger.info("Phone disconnected: %s (total=%d)", phone_id, len(self._phones))

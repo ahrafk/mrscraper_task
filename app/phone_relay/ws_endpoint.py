@@ -45,7 +45,7 @@ async def phone_ws(websocket: WebSocket, phone_id: str, token: str = Query(...))
     except Exception as err:
         logger.warning("Phone websocket error (phone=%s): %s", phone_id, err)
     finally:
-        phone_registry.unregister(phone_id)
+        phone_registry.unregister(phone_id, phone)
 
 
 async def _handle_control_message(phone, text: str) -> None:

@@ -66,8 +66,26 @@ async def render_via_phone(url: str, timeout_s: float | None = None, use_search:
             raise RenderError(result["error"])
         block = detect_block(result.get("status"), result.get("html", ""))
         if block.blocked:
-            logger.warning("Render blocked on phone=%s reason=%s", phone.phone_id, block.reason)
-            phone_registry.penalize(phone.phone_id, settings.PHONE_RELAY_BLOCK_PENALTY_MS / 1000)
+            # a short response usually means a real block page came back, but the phone
+            # can also come back short because its own js bridge kept failing to read the
+            # page, nothing to do with Lowe's flagging it. that looks the same from here
+            # (short html, no obvious error) but it's a device hiccup, not detection, so it
+            # shouldn't cost the phone a full block penalty, the lighter timeout strike is
+            # enough to let it recover
+            bridge_struggled = (
+                block.reason == "suspiciously-short-response" and result.get("js_bridge_failures", 0) >= 6
+            )
+            if bridge_struggled:
+                logger.warning(
+                    "Render came back short on phone=%s but its js bridge failed %d times, "
+                    "treating as a device hiccup rather than a block",
+                    phone.phone_id,
+                    result.get("js_bridge_failures", 0),
+                )
+                phone_registry.record_timeout(phone.phone_id)
+            else:
+                logger.warning("Render blocked on phone=%s reason=%s", phone.phone_id, block.reason)
+                phone_registry.penalize(phone.phone_id, settings.PHONE_RELAY_BLOCK_PENALTY_MS / 1000)
         return result
     finally:
         phone.pending_renders.pop(job_id, None)

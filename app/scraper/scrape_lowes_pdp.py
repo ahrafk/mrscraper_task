@@ -8,7 +8,7 @@ from app.config import settings
 from app.logging_config import get_logger
 from app.phone_relay.render_dispatcher import RenderError, render_via_phone
 from app.scraper.block_detector import detect_block
-from app.scraper.price_extractor import extract_price
+from app.scraper.price_extractor import extract_price, is_confirmed_unavailable
 from app.scraper.url_validator import validate_lowes_pdp_url
 
 logger = get_logger(__name__)
@@ -50,7 +50,9 @@ def _evaluate_attempt(target_id: str, landed_url: str, status, html: str):
         return block.reason or "blocked", None
     price_result = extract_price(html)
     if not price_result.found:
-        return "price-not-found", None
+        if is_confirmed_unavailable(html):
+            return "price-not-found-confirmed-unavailable", None
+        return "price-not-found-unconfirmed", None
     return None, price_result.price_text or ""
 
 
@@ -85,6 +87,31 @@ async def scrape_lowes_pdp(raw_url: str) -> ScrapeResult:
         landed_url = result.get("final_url") or url
 
         error, price = _evaluate_attempt(target_id, landed_url, status, html)
+        if error == "price-not-found-confirmed-unavailable":
+            # the page itself landed correctly and isn't blocked, and Lowe's own product
+            # data on the page confirms this listing is genuinely unavailable, not just
+            # missing a price by accident. that won't change on a retry, the product is
+            # still the same product, so retrying here would only tie up a phone
+            # re-rendering a page that can't come back with a price. treat it as a real,
+            # successfully scraped page right away instead.
+            logger.warning(
+                "No price on phone render (attempt=%d) — confirmed unavailable, treating as a genuine priceless page",
+                attempts,
+            )
+            last_priceless_html = html
+            break
+        if error == "price-not-found-unconfirmed":
+            # price is missing but nothing on the page confirms the product is actually
+            # unavailable, this looks more like an incomplete render than a real out of
+            # stock page, so it's worth a retry, but keep this html as a fallback in case
+            # every attempt ends up the same way
+            last_error = error
+            last_priceless_html = html
+            logger.warning(
+                "No price on phone render (attempt=%d) and nothing on the page confirms it's genuinely unavailable — retrying",
+                attempts,
+            )
+            continue
         if error:
             last_error = error
             logger.warning(
@@ -94,11 +121,6 @@ async def scrape_lowes_pdp(raw_url: str) -> ScrapeResult:
             )
             if error == "wrong-page-landed":
                 use_search = False
-            elif error == "price-not-found":
-                # the page itself landed correctly and isn't blocked, it just has no price to
-                # show right now (commonly a genuinely out of stock or discontinued item), so
-                # this is a real, successfully scraped page, not a failed scrape
-                last_priceless_html = html
             continue
 
         return ScrapeResult(

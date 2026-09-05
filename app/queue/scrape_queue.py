@@ -5,7 +5,7 @@ from app.config import settings
 
 T = TypeVar("T")
 
-_lock = asyncio.Lock()
+_condition = asyncio.Condition()
 _pending = 0
 _active = 0
 
@@ -20,13 +20,14 @@ async def enqueue(fn: Callable[[], Awaitable[T]]) -> T:
     global _pending, _active
     _pending += 1
     try:
-        while True:
-            async with _lock:
-                if _active < _capacity():
-                    _pending -= 1
-                    _active += 1
-                    break
-            await asyncio.sleep(0.2)
+        async with _condition:
+            while _active >= _capacity():
+                try:
+                    await asyncio.wait_for(_condition.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
+            _pending -= 1
+            _active += 1
     except BaseException:
         _pending -= 1
         raise
@@ -34,8 +35,9 @@ async def enqueue(fn: Callable[[], Awaitable[T]]) -> T:
     try:
         return await fn()
     finally:
-        async with _lock:
+        async with _condition:
             _active -= 1
+            _condition.notify_all()
 
 
 def queue_status() -> dict:
