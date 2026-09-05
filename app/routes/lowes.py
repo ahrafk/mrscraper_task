@@ -4,11 +4,12 @@ from typing import Literal
 from fastapi import APIRouter, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from app.config import settings
 from app.logging_config import get_logger
 from app.metrics import RequestRecord, metrics
 from app.phone_relay.registry import phone_registry
 from app.phone_relay.render_dispatcher import RenderError, render_via_phone
-from app.queue.scrape_queue import enqueue, queue_status
+from app.queue.scrape_queue import QueueTimeoutError, enqueue, queue_status
 from app.scraper.scrape_lowes_pdp import ScrapeError, scrape_lowes_pdp
 from app.scraper.url_validator import InvalidProductUrlError
 
@@ -24,8 +25,9 @@ async def get_lowes_pdp(
     ),
 ):
     start = time.monotonic()
+    deadline = start + settings.REQUEST_BUDGET_MS / 1000
     try:
-        result = await enqueue(lambda: scrape_lowes_pdp(productUrl))
+        result = await enqueue(lambda: scrape_lowes_pdp(productUrl, started_at=start), deadline=deadline)
         metrics.record(
             RequestRecord(
                 ok=True,
@@ -64,6 +66,26 @@ async def get_lowes_pdp(
         logger.error("Scrape failed for %s: %s", productUrl, err)
         return JSONResponse(
             status_code=err.status_code, content={"error": "scrape_failed", "message": str(err)}
+        )
+    except QueueTimeoutError:
+        latency_ms = (time.monotonic() - start) * 1000
+        metrics.record(
+            RequestRecord(
+                ok=False,
+                latency_ms=latency_ms,
+                attempts=0,
+                blocked_retries=0,
+                timestamp=time.time(),
+                error_reason="queue-timeout",
+            )
+        )
+        logger.error("No phone capacity in time for %s", productUrl)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "server_busy",
+                "message": "No phone was available in time, the fleet is at capacity right now",
+            },
         )
     except Exception as err:
         latency_ms = (time.monotonic() - start) * 1000

@@ -56,9 +56,14 @@ def _evaluate_attempt(target_id: str, landed_url: str, status, html: str):
     return None, price_result.price_text or ""
 
 
-async def scrape_lowes_pdp(raw_url: str) -> ScrapeResult:
+async def scrape_lowes_pdp(raw_url: str, started_at: float | None = None) -> ScrapeResult:
     url = validate_lowes_pdp_url(raw_url)
-    start = time.monotonic()
+    # the budget has to span from when the request actually arrived, not from whenever
+    # a phone slot opened up. otherwise a request that spent 40s waiting in the queue
+    # gets handed a fresh 60s on top once it's dispatched, so its real end to end time
+    # can run well past what any caller is willing to wait, even though from the
+    # request's own point of view it never went over budget
+    start = started_at if started_at is not None else time.monotonic()
     deadline = start + settings.REQUEST_BUDGET_MS / 1000
     target_id = _product_id(url)
 
