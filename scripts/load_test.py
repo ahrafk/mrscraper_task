@@ -39,7 +39,7 @@ async def hit(client: httpx.AsyncClient, url: str) -> RequestResult:
     start = time.monotonic()
     try:
         res = await client.get(
-            f"{API_BASE}/lowes", params={"productUrl": url, "format": "json"}, timeout=70
+            f"{API_BASE}/lowes", params={"productUrl": url, "format": "json"}, timeout=95
         )
         latency_ms = (time.monotonic() - start) * 1000
         if res.status_code >= 400:
