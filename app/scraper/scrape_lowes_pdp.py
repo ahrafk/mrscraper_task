@@ -69,7 +69,7 @@ async def scrape_lowes_pdp(raw_url: str, started_at: float | None = None) -> Scr
 
     last_error = "unknown"
     attempts = 0
-    use_search = True
+    use_search = settings.PHONE_RELAY_USE_SEARCH_DEFAULT
     last_priceless_html: str | None = None
 
     while attempts < settings.MAX_ATTEMPTS_PER_REQUEST and time.monotonic() < deadline:

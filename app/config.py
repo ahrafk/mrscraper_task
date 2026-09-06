@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     MIN_DELAY_MS: int = 800
     MAX_DELAY_MS: int = 3500
 
-    REQUEST_BUDGET_MS: int = 60000
+    REQUEST_BUDGET_MS: int = 90000
     MAX_ATTEMPTS_PER_REQUEST: int = 4
 
     PHONE_RELAY_ENABLED: bool = False
@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     PHONE_RELAY_BLOCK_PENALTY_MS: int = 180000
     PHONE_RELAY_TIMEOUT_PENALTY_MS: int = 60000
     PHONE_RELAY_TIMEOUT_STRIKE_LIMIT: int = 2
+    PHONE_RELAY_USE_SEARCH_DEFAULT: bool = True
 
 
 @lru_cache
