@@ -5,8 +5,10 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
-
+from dotenv import load_dotenv
 import httpx
+
+load_dotenv()
 
 API_BASE = os.environ.get("API_BASE", "http://localhost:3000")
 URLS_FILE = Path(os.environ.get("URLS_FILE", "test-urls/pdp-urls.txt"))

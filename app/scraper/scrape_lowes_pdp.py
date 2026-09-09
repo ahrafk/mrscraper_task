@@ -125,7 +125,12 @@ async def scrape_lowes_pdp(raw_url: str, started_at: float | None = None) -> Scr
                 error,
             )
             if error == "wrong-page-landed":
-                use_search = False
+                # whichever approach just landed wrong, try the other one next. forcing
+                # this to direct nav unconditionally used to make sense when search was
+                # the default, but now that direct nav is the default, a wrong landing
+                # while already on direct nav would otherwise just repeat the same
+                # failing navigation for every remaining attempt
+                use_search = not use_search
             continue
 
         return ScrapeResult(
