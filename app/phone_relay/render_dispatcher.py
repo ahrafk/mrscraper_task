@@ -5,7 +5,7 @@ import time
 
 from app.config import settings
 from app.logging_config import get_logger
-from app.phone_relay.registry import phone_registry
+from app.phone_relay.registry import PhoneConnection, phone_registry
 from app.scraper.block_detector import detect_block
 
 logger = get_logger(__name__)
@@ -16,6 +16,7 @@ class RenderError(Exception):
 
 
 MIN_RENDER_RESERVE_S = 40.0
+PHONE_TIMEOUT_GRACE_S = 50.0
 
 _SLUG_RE = re.compile(r"/pd/([^/]+)/(\d+)")
 
@@ -48,6 +49,7 @@ async def render_via_phone(url: str, timeout_s: float | None = None, use_search:
     future: asyncio.Future = asyncio.get_event_loop().create_future()
     phone.pending_renders[job_id] = future
     phone.active_stream_count += 1
+    timed_out = False
 
     try:
         search_query = derive_search_query(url) if use_search else ""
@@ -55,10 +57,12 @@ async def render_via_phone(url: str, timeout_s: float | None = None, use_search:
             {"type": "render", "job_id": job_id, "url": url, "search_query": search_query}
         )
         try:
-            result = await asyncio.wait_for(future, timeout=timeout_s)
+            result = await asyncio.wait_for(asyncio.shield(future), timeout=timeout_s)
         except asyncio.TimeoutError:
             logger.warning("Render timed out on phone=%s after %.1fs", phone.phone_id, timeout_s)
             phone_registry.record_timeout(phone.phone_id)
+            timed_out = True
+            asyncio.create_task(_release_after_grace(phone, job_id, future))
             raise RenderError("render timed out")
         phone_registry.record_success(phone.phone_id)
         if result.get("error"):
@@ -88,5 +92,15 @@ async def render_via_phone(url: str, timeout_s: float | None = None, use_search:
                 phone_registry.penalize(phone.phone_id, settings.PHONE_RELAY_BLOCK_PENALTY_MS / 1000)
         return result
     finally:
-        phone.pending_renders.pop(job_id, None)
-        phone.active_stream_count = max(0, phone.active_stream_count - 1)
+        if not timed_out:
+            phone.pending_renders.pop(job_id, None)
+            phone.active_stream_count = max(0, phone.active_stream_count - 1)
+
+
+async def _release_after_grace(phone: PhoneConnection, job_id: str, future: asyncio.Future) -> None:
+    try:
+        await asyncio.wait_for(future, timeout=PHONE_TIMEOUT_GRACE_S)
+    except Exception:
+        pass
+    phone.pending_renders.pop(job_id, None)
+    phone.active_stream_count = max(0, phone.active_stream_count - 1)
