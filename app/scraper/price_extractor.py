@@ -47,6 +47,7 @@ def extract_price(html: str) -> PriceExtractResult:
 
     json_match = _PRICE_JSON_RE.search(html)
     if json_match:
-        return PriceExtractResult(True, f"${json_match.group(1)}")
+        amount = float(json_match.group(1))
+        return PriceExtractResult(True, f"${amount:.2f}")
 
     return PriceExtractResult(False)
