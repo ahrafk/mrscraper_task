@@ -12,6 +12,7 @@ class RequestRecord:
     blocked_retries: int
     timestamp: float
     error_reason: Optional[str] = None
+    price_found: bool = False
 
 
 class Metrics:
@@ -43,6 +44,8 @@ class Metrics:
 
         avg_latency = avg(latencies)
         error_reasons = Counter(r.error_reason for r in errors if r.error_reason)
+        priced = [r for r in successes if r.price_found]
+        priceless = [r for r in successes if not r.price_found]
         return {
             "windowStartedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self._started_at)),
             "windowDurationSec": round(time.time() - self._started_at),
@@ -50,6 +53,12 @@ class Metrics:
             "successCount": len(successes),
             "errorCount": len(errors),
             "errorRatePct": round((len(errors) / total) * 100, 2) if total else 0,
+            # successCount alone only means "no error was raised", a page returned with
+            # no price on it still counts there. this is the number that actually matters,
+            # a 200 with an empty price is not what the challenge is asking for
+            "priceFoundCount": len(priced),
+            "priceFoundRatePct": round((len(priced) / total) * 100, 2) if total else 0,
+            "successNoPriceCount": len(priceless),
             "avgLatencyMs": round(avg_latency),
             "p50LatencyMs": round(percentile(latencies, 50)),
             "p95LatencyMs": round(percentile(latencies, 95)),

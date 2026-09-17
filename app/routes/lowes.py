@@ -35,6 +35,7 @@ async def get_lowes_pdp(
                 attempts=result.attempts,
                 blocked_retries=result.attempts - 1,
                 timestamp=time.time(),
+                price_found=bool(result.price),
             )
         )
         if format == "json":

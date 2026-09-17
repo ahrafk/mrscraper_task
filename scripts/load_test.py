@@ -57,9 +57,12 @@ async def hit(client: httpx.AsyncClient, url: str) -> RequestResult:
 def print_progress(results: list[RequestResult]) -> None:
     n = len(results)
     ok_count = sum(1 for r in results if r.ok)
+    priced_count = sum(1 for r in results if r.ok and r.price_found)
     avg_latency = sum(r.latency_ms for r in results) / n
     err_rate = (n - ok_count) / n * 100
-    print(f"[{n} done] ok={ok_count} errRate={err_rate:.1f}% avgLatency={avg_latency:.0f}ms")
+    print(
+        f"[{n} done] ok={ok_count} priced={priced_count} errRate={err_rate:.1f}% avgLatency={avg_latency:.0f}ms"
+    )
 
 
 async def run_pool(
@@ -105,17 +108,26 @@ async def main() -> None:
 
     ok_results = [r for r in results if r.ok]
     err_results = [r for r in results if not r.ok]
+    priced_results = [r for r in ok_results if r.price_found]
+    success_no_price_results = [r for r in ok_results if not r.price_found]
     avg_latency_ms = sum(r.latency_ms for r in ok_results) / len(ok_results) if ok_results else 0
     error_rate_pct = (len(err_results) / len(results) * 100) if results else 0
 
     summary = {
         "totalRequests": len(results),
         "successCount": len(ok_results),
+        # successCount only means the server didn't raise an error, a 200 with no price
+        # on the page counts there too. priceFoundCount is the number that actually
+        # matters, since the challenge asks for the price to be present, not just a
+        # clean response
+        "priceFoundCount": len(priced_results),
+        "priceFoundRatePct": round(len(priced_results) / len(results) * 100, 2) if results else 0,
+        "successNoPriceCount": len(success_no_price_results),
         "errorCount": len(err_results),
         "errorRatePct": round(error_rate_pct, 2),
         "avgLatencyMs": round(avg_latency_ms),
         "durationSec": round(duration_s),
-        "meetsVolumeCriterion": len(ok_results) >= 1000,
+        "meetsVolumeCriterion": len(priced_results) >= 1000,
         "meetsLatencyCriterion": avg_latency_ms <= 60000,
         "meetsErrorRateCriterion": error_rate_pct <= 5,
         "meetsDurationCriterion": duration_s >= 3600,
@@ -125,10 +137,17 @@ async def main() -> None:
     print(json.dumps(summary, indent=2))
 
     REPORT_PATH.write_text(
-        json.dumps({"summary": summary, "sampleErrors": [asdict(r) for r in err_results[:50]]}, indent=2),
+        json.dumps(
+            {
+                "summary": summary,
+                "sampleErrors": [asdict(r) for r in err_results[:50]],
+                "sampleSuccessNoPrice": [r.url for r in success_no_price_results[:50]],
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
-    print(f"\nFull summary (+ up to 50 sample errors) written to {REPORT_PATH}")
+    print(f"\nFull summary (+ up to 50 sample errors, 50 sample priceless URLs) written to {REPORT_PATH}")
 
 
 if __name__ == "__main__":
