@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     PHONE_RELAY_TIMEOUT_STRIKE_LIMIT: int = 2
     PHONE_RELAY_USE_SEARCH_DEFAULT: bool = True
 
+    PHONE_RELAY_STORE_ID: str = "2547"
+    PHONE_RELAY_STORE_ZIP: str = "93552"
+    PHONE_RELAY_STORE_STATE: str = "CA"
+    PHONE_RELAY_STORE_REGION: str = "8"
+    PHONE_RELAY_STORE_NEARBY_ID: str = "2502"
+    PHONE_RELAY_STORE_CITY: str = "Palmdale"
+    PHONE_RELAY_STORE_NAME: str = "E. Palmdale Lowe's"
+
 
 @lru_cache
 def get_settings() -> Settings:

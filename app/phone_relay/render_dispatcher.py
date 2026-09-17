@@ -2,6 +2,7 @@ import asyncio
 import re
 import secrets
 import time
+from urllib.parse import quote
 
 from app.config import settings
 from app.logging_config import get_logger
@@ -29,6 +30,30 @@ def derive_search_query(url: str) -> str:
     return f"{slug.replace('-', ' ')} {product_id}"
 
 
+def build_store_cookies() -> list[str]:
+    store_id = settings.PHONE_RELAY_STORE_ID
+    zip_code = settings.PHONE_RELAY_STORE_ZIP
+    state = settings.PHONE_RELAY_STORE_STATE
+    region = settings.PHONE_RELAY_STORE_REGION
+    sd_value = (
+        f'{{"id":"{store_id}","zip":"{zip_code}","city":"{settings.PHONE_RELAY_STORE_CITY}",'
+        f'"state":"{state}","name":"{settings.PHONE_RELAY_STORE_NAME}","region":"{region}"}}'
+    )
+    p13n_value = (
+        f'{{"zipCode":"{zip_code}","storeId":"{store_id}","state":"{state}",'
+        f'"audienceList":["FQSP","WDIY"]}}'
+    )
+    return [
+        f"sn={store_id}",
+        f"sd={quote(sd_value)}",
+        f"zipcode={zip_code}",
+        f"zipstate={state}",
+        f"regionNumber={region}",
+        f"nearbyid={settings.PHONE_RELAY_STORE_NEARBY_ID}",
+        f"p13n={quote(p13n_value)}",
+    ]
+
+
 async def render_via_phone(url: str, timeout_s: float | None = None, use_search: bool = True) -> dict:
     if timeout_s is None:
         timeout_s = settings.PHONE_RELAY_RENDER_TIMEOUT_MS / 1000
@@ -54,7 +79,13 @@ async def render_via_phone(url: str, timeout_s: float | None = None, use_search:
     try:
         search_query = derive_search_query(url) if use_search else ""
         await phone.send_json(
-            {"type": "render", "job_id": job_id, "url": url, "search_query": search_query}
+            {
+                "type": "render",
+                "job_id": job_id,
+                "url": url,
+                "search_query": search_query,
+                "store_cookies": build_store_cookies(),
+            }
         )
         try:
             result = await asyncio.wait_for(asyncio.shield(future), timeout=timeout_s)
